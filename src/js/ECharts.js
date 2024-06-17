@@ -3,7 +3,7 @@
  * Copyright (C) 2019 Future Internet Consulting and Development Solutions S.L. All Rights Reserved.
  *
  */
-/* globals echarts, ResizeObserver */
+/* globals echarts, ResizeObserver, Wirecloud */
 
 (function () {
 
@@ -62,7 +62,40 @@
             this.echart.on('highlight', (event) => {
                 const dataObjs = [];
                 event.batch.forEach((item) => {
-                    dataObjs.push(this.createDataObj(item.seriesIndex, item.dataIndex));
+                    let seriesIndex = item.seriesIndex;
+                    if (seriesIndex == null && item.seriesId != null) {
+                        // Get the series index from the seriesId
+                        const seriesId = item.seriesId;
+                        const series = this.echart.getOption().series;
+
+                        // Try to find the series index by the seriesId
+                        seriesIndex = series.findIndex((s) => s.id === seriesId);
+                        if (seriesIndex === -1) {
+                            // The id is based off the series name, which is NULL byte + name + NULL byte + index
+                            const seriesName = seriesId.split('\0')[1];
+                            seriesIndex = series.findIndex((s) => s.name === seriesName);
+                        }
+                    }
+
+                    if (seriesIndex === -1) {
+                        // We log an error
+                        this.MashupPlatform.widget.log("Error in the highlight event. Series not found", this.MashupPlatform.log.ERROR);
+                        return;
+                    }
+
+                    let dataIndex = item.dataIndex;
+                    if (dataIndex == null && item.dataIndexInside == null) {
+                        // We log an error
+                        this.MashupPlatform.widget.log("Error in the highlight event. Data index not found", this.MashupPlatform.log.ERROR);
+                    } else if (dataIndex == null) {
+                        if (item.dataIndexInside) {
+                            item.dataIndexInside.forEach((index) => {
+                                dataObjs.push(this.createDataObj(seriesIndex, index));
+                            });
+                        }
+                    } else {
+                        dataObjs.push(this.createDataObj(seriesIndex, dataIndex));
+                    }
                 });
                 const eventData = {
                     event: 'highlight',
@@ -147,6 +180,11 @@
         }
     }
 
-    window.FICODES_ECharts = Widget;
+    if (!window.Wirecloud || !window.Wirecloud.registerWidgetClass) {
+        // For testing purposes (and old Wirecloud versions)
+        window.FICODES_ECharts = Widget;
+    } else {
+        Wirecloud.registerWidgetClass(document.currentScript, Widget);
+    }
 
 })();
